@@ -6,7 +6,11 @@ part 'example.g.dart';
 
 @VirtualStatics()
 sealed class Thing {
+  @virtual
+  static const dbId = 0;
 
+  @virtual
+  static void doSomething() {}
 }
 
 class Animal extends Thing {}

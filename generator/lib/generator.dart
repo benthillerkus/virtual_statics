@@ -6,6 +6,13 @@ import 'package:build/build.dart';
 import 'package:source_gen/source_gen.dart';
 import 'package:virtual_statics/virtual_statics.dart';
 
+extension VirtualStaticsExt on VirtualStatics {
+  static VirtualStatics fromAnnotation(ConstantReader annotation) => VirtualStatics(
+        postfix: annotation.read("postfix").stringValue,
+        flattenHierarchy: annotation.read("flattenHierarchy").boolValue,
+      );
+}
+
 class VirtualStaticsGenerator extends Generator {
   const VirtualStaticsGenerator();
 
@@ -19,7 +26,7 @@ class VirtualStaticsGenerator extends Generator {
     final roots = [
       for (final AnnotatedElement(:annotation, :element) in potentialRoots)
         if (element case final ClassElement element when element.isSealed)
-          (element, annotation.read("flattenHierarchy").boolValue)
+          (element, VirtualStaticsExt.fromAnnotation(annotation))
         else
           throw InvalidGenerationSourceError(
             "VirtualStatics can only be used on sealed classes.",
@@ -29,10 +36,10 @@ class VirtualStaticsGenerator extends Generator {
     ];
 
     /// Build a type hierarchy for all classes in the library
-    final hierarchy = <ClassElement, List<ClassElement>>{for (final (root, _) in roots) root: []};
+    final hierarchy = {for (final (root, options) in roots) root: (options, <ClassElement>[])};
 
     for (final element in library.classes) {
-      for (final MapEntry(key: root, value: subtyes) in hierarchy.entries) {
+      for (final MapEntry(key: root, value: (_, subtyes)) in hierarchy.entries) {
         if (element.supertype == root.thisType ||
             element.interfaces.contains(root.thisType) ||
             element.mixins.contains(root.thisType)) {
@@ -42,8 +49,10 @@ class VirtualStaticsGenerator extends Generator {
     }
 
     final buffer = StringBuffer();
+    final write = buffer.write;
+    final writeln = buffer.writeln;
 
-    for (final MapEntry(key: root, value: subtypes) in hierarchy.entries) {
+    for (final MapEntry(key: root, value: (options, subtypes)) in hierarchy.entries) {
       if (subtypes.isEmpty) {
         throw InvalidGenerationSourceError(
           "Sealed class must have at least one subtype.",
@@ -51,17 +60,26 @@ class VirtualStaticsGenerator extends Generator {
           todo: "Extend or implement the sealed class.",
         );
       }
-      buffer.writeln("enum ${root.name}Kind {");
+
+      write("/// Helper class for [");
+      write(root.name);
+      writeln("].");
+      write("enum ");
+      write(root.name);
+      write(options.postfix);
+      writeln(" {");
       bool first = true;
       for (final subtype in subtypes) {
-        if (!first) buffer.writeln(",");
+        if (!first) writeln(",");
         first = false;
-        buffer.write("  ");
-        buffer.write(subtype.name.toLowerCase().substring(0, 1));
-        buffer.write(subtype.name.substring(1));
+        write("/// Virtual statics for [");
+        write(subtype.name);
+        writeln("].");
+        write(subtype.name.toLowerCase().substring(0, 1));
+        write(subtype.name.substring(1));
       }
-      buffer.writeln(";");
-      buffer.writeln("}");
+      writeln(";");
+      writeln("}");
     }
 
     return buffer.toString();

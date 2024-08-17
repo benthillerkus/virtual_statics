@@ -6,8 +6,14 @@ part of 'example.dart';
 // VirtualStaticsGenerator
 // **************************************************************************
 
-enum ThingKind {
+/// Helper class for [Thing].
+enum Things {
+  /// Virtual statics for [Animal].
   animal,
+
+  /// Virtual statics for [Plant].
   plant,
+
+  /// Virtual statics for [ExistentialDread].
   existentialDread;
 }
