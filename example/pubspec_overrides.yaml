@@ -1,0 +1,6 @@
+# melos_managed_dependency_overrides: virtual_statics,virtual_statics_builder
+dependency_overrides:
+  virtual_statics:
+    path: ..\\annotations
+  virtual_statics_builder:
+    path: ..\\generator

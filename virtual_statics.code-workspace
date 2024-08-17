@@ -1,0 +1,31 @@
+{
+  "folders": [
+    {
+      "path": "generator",
+    },
+    {
+      "path": "annotations",
+    },
+    {
+      "path": "example",
+    },
+    {
+      "name": "workspace",
+      "path": "."
+    }
+  ],
+  "settings": {
+    "workbench.editor.customLabels.patterns": {
+			"**/*.dart": "${dirname}/${filename}"
+		},
+    "files.exclude": {
+      "**/.idea": true,
+      "**/.dart_tool": true,
+    },
+    "dart.lineLength": 120,
+    "editor.rulers": [],
+    "[dart]": {
+      "editor.rulers": []
+    }
+  }
+}

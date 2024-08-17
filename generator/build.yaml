@@ -1,0 +1,15 @@
+targets:
+  $default:
+    builders:
+      generators|annotations:
+        enabled: true
+
+builders:
+  generators:
+    target: ":virtual_statics"
+    import: "package:virtual_statics_builder/virtual_statics_builder.dart"
+    build_extensions: { ".dart": [".g.dart"] }
+    builder_factories: ["virtualStaticsBuilder"]
+    auto_apply: dependents
+    build_to: cache
+    applies_builders: ["source_gen|combining_builder"] 
