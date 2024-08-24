@@ -3,6 +3,9 @@
 /// More dartdocs go here.
 library;
 
+import 'package:meta/meta_meta.dart';
+
+@Target({TargetKind.classType})
 class VirtualStatics {
   const VirtualStatics({this.postfix = "s", this.flattenHierarchy = false});
 
@@ -13,6 +16,7 @@ class VirtualStatics {
 /// Shorthand for [VirtualStatics] with default values.
 const virtualStatics = VirtualStatics();
 
+@Target({TargetKind.field, TargetKind.method})
 class Virtual {
   const Virtual();
 }

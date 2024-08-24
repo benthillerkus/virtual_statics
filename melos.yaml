@@ -15,3 +15,8 @@ command:
       test: ^1.24.0
       build_runner: ^2.4.12
 
+scripts:
+  build:
+    exec: dart run build_runner build
+    packageFilters:
+      scope: example

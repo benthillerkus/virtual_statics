@@ -1,0 +1,14 @@
+{
+  "version": "2.0.0",
+  "tasks": [
+    {
+      "type": "melos",
+      "script": "build",
+      "label": "Run build_runner in example project",
+      "group": {
+        "isDefault": true,
+        "kind": "build"
+      },
+    }
+  ]
+}
