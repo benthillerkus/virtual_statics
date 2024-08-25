@@ -5,6 +5,7 @@
       <module fileurl="file://$PROJECT_DIR$/example/melos_example.iml" filepath="$PROJECT_DIR$/example/melos_example.iml" />
       <module fileurl="file://$PROJECT_DIR$/annotations/melos_virtual_statics.iml" filepath="$PROJECT_DIR$/annotations/melos_virtual_statics.iml" />
       <module fileurl="file://$PROJECT_DIR$/generator/melos_virtual_statics_builder.iml" filepath="$PROJECT_DIR$/generator/melos_virtual_statics_builder.iml" />
+      <module fileurl="file://$PROJECT_DIR$/melos_workspace.iml" filepath="$PROJECT_DIR$/melos_workspace.iml" />
       <module fileurl="file://$PROJECT_DIR$/melos_virtual_statics.iml" filepath="$PROJECT_DIR$/melos_virtual_statics.iml" />
     </modules>
   </component>
