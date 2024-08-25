@@ -71,6 +71,18 @@ enum Televisions {
         Televisions.lcd => LCD.price,
       };
 
+  void a([
+    int? b,
+  ]) =>
+      switch (this) {
+        Televisions.crt => CRT.a(
+            b ?? (0),
+          ),
+        Televisions.lcd => LCD.a(
+            b ?? (2),
+          ),
+      };
+
   factory Televisions.fromInstance(Television instance) {
     return switch (instance) {
       CRT() => crt,
@@ -95,6 +107,13 @@ enum Postfixes {
 
   /// Virtual statics for [Type].
   type;
+
+  /// The length of the postfix.
+  int get length => switch (this) {
+        Postfixes.s => S.length,
+        Postfixes.kind => Kind.length,
+        Postfixes.type => Type.length,
+      };
 
   factory Postfixes.fromInstance(Postfix instance) {
     return switch (instance) {

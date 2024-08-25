@@ -2,6 +2,7 @@ import 'dart:async';
 
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
+import 'package:analyzer/dart/element/nullability_suffix.dart';
 import 'package:analyzer/dart/element/visitor.dart';
 import 'package:build/build.dart';
 import 'package:source_gen/source_gen.dart';
@@ -72,6 +73,19 @@ class VirtualStaticsGenerator extends Generator {
               ),
       ];
 
+      final virtualGetters = [
+        for (final field in root.accessors)
+          if (_virtualChecker.firstAnnotationOf(field) case final DartObject _)
+            if (field.isStatic && field.isGetter)
+              field
+            else
+              throw InvalidGenerationSourceError(
+                "Only static getters can be annotated with @virtual.",
+                element: field,
+                todo: "Make the getter static or remove the annotation.",
+              ),
+      ];
+
       final virtualMethods = [
         for (final method in root.methods)
           if (_virtualChecker.firstAnnotationOf(method) case final DartObject _)
@@ -111,6 +125,13 @@ class VirtualStaticsGenerator extends Generator {
                 todo: "Either make the field const or remove the const annotation from ${root.name}.${virtual.name}.",
               );
             }
+            if (field.type != virtual.type) {
+              throw InvalidGenerationSourceError(
+                "Field must have the same type as the virtual field on ${root.name}.",
+                element: field,
+                todo: "Change the type to ${virtual.type}.",
+              );
+            }
           } else {
             throw InvalidGenerationSourceError(
               "Subtype must have a static const field named '${virtual.name}'.",
@@ -120,19 +141,106 @@ class VirtualStaticsGenerator extends Generator {
           }
         }
 
-        for (final virtual in virtualMethods) {
-          if (subtype.getMethod(virtual.name) case final MethodElement method) {
-            if (method.isStatic) continue;
+        for (final virtual in virtualGetters) {
+          if (subtype.getGetter(virtual.name) case final PropertyAccessorElement getter) {
+            if (!getter.isStatic) {
+              throw InvalidGenerationSourceError(
+                "Getter must be static.",
+                element: getter,
+              );
+            }
+            if (getter.returnType != virtual.returnType) {
+              throw InvalidGenerationSourceError(
+                "Getter must have the same return type as the virtual getter on ${root.name}.",
+                element: getter,
+                todo: "Change the return type to ${virtual.returnType}.",
+              );
+            }
+          } else {
             throw InvalidGenerationSourceError(
-              "Method must be static.",
-              element: method,
+              "Subtype must have a static getter named '${virtual.name}'.",
+              element: subtype,
+              todo: "Add a static getter named '${virtual.name}'.",
             );
           }
-          throw InvalidGenerationSourceError(
-            "Subtype must have a static method named '${virtual.name}'.",
-            element: subtype,
-            todo: "Add a static method named '${virtual.name}'.",
-          );
+        }
+
+        for (final virtual in virtualMethods) {
+          if (subtype.getMethod(virtual.name) case final MethodElement method) {
+            if (!method.isStatic) {
+              throw InvalidGenerationSourceError(
+                "Method must be static.",
+                element: method,
+              );
+            }
+            if (method.returnType != virtual.returnType) {
+              throw InvalidGenerationSourceError(
+                "Method must have the same return type as ${root.name}.${virtual.name}.",
+                element: method,
+                todo: "Change the return type to ${virtual.returnType}.",
+              );
+            }
+            if (method.parameters.length != virtual.parameters.length) {
+              throw InvalidGenerationSourceError(
+                "Method must have the same parameters as ${root.name}.${virtual.name}.",
+                element: method,
+                todo: "Change the number of parameters to ${virtual.parameters.length}.",
+              );
+            }
+            for (int i = 0; i < method.parameters.length; i++) {
+              final parameter = method.parameters[i];
+              final virtualParameter = virtual.parameters[i];
+              if (parameter.type != virtualParameter.type) {
+                throw InvalidGenerationSourceError(
+                  "Parameter must have the same type as the virtual parameter on ${root.name}.",
+                  element: parameter,
+                  todo: "Change the type to ${virtualParameter.type}.",
+                );
+              }
+              if (parameter.isRequiredNamed && !virtualParameter.isRequiredNamed) {
+                throw InvalidGenerationSourceError(
+                  "Parameter must be `required` and named.",
+                  element: parameter,
+                );
+              }
+              if (parameter.isOptionalNamed && !virtualParameter.isOptionalNamed) {
+                throw InvalidGenerationSourceError(
+                  "Parameter must be named.",
+                  element: parameter,
+                );
+              }
+              if (parameter.isOptionalPositional && !virtualParameter.isOptionalPositional) {
+                throw InvalidGenerationSourceError(
+                  "Parameter must be optional and positional.",
+                  element: parameter,
+                );
+              }
+              if (parameter.isRequiredPositional && !virtualParameter.isRequiredPositional) {
+                throw InvalidGenerationSourceError(
+                  "Parameter must be required and positional.",
+                  element: parameter,
+                );
+              }
+              if (parameter.isCovariant && !virtualParameter.isCovariant) {
+                throw InvalidGenerationSourceError(
+                  "Parameter must be covariant.",
+                  element: parameter,
+                );
+              }
+              if (parameter.isFinal && !virtualParameter.isFinal) {
+                throw InvalidGenerationSourceError(
+                  "Parameter must be final.",
+                  element: parameter,
+                );
+              }
+            }
+          } else {
+            throw InvalidGenerationSourceError(
+              "Subtype must have a static method named '${virtual.name}'.",
+              element: subtype,
+              todo: "Add a static method named '${virtual.name}'.",
+            );
+          }
         }
       }
 
@@ -147,7 +255,7 @@ class VirtualStaticsGenerator extends Generator {
                   // Otherwise, lowercase the first letter to achieve camelCase.
                   : "${subtype.name.toLowerCase().substring(0, 1)}${subtype.name.substring(1)}",
       };
-      final hasMembers = virtualFields.isNotEmpty || virtualMethods.isNotEmpty;
+      final hasMembers = virtualFields.isNotEmpty || virtualGetters.isNotEmpty || virtualMethods.isNotEmpty;
       final needsConstructor = hasMembers && virtualFields.any((field) => field.isConst);
 
       writeln("/// Helper class for [ ${root.name} ].");
@@ -199,6 +307,93 @@ class VirtualStaticsGenerator extends Generator {
               }
               writeln("};");
             }
+              writeln();
+          }
+
+          for (final virtual in virtualGetters) {
+            if (virtual.documentationComment != null) writeln(virtual.documentationComment);
+            write("${virtual.returnType} get ${virtual.name} => switch (this) {");
+            {
+              for (final subtype in subtypes) {
+                writeln("$name.${variantNames[subtype]} => ${subtype.name}.${virtual.name},");
+              }
+            }
+            writeln("};");
+            writeln();
+          }
+
+          for (final virtual in virtualMethods) {
+            if (virtual.documentationComment != null) writeln(virtual.documentationComment);
+            write("${virtual.returnType} ${virtual.name}(");
+            final requiredPositional = <ParameterElement>[];
+            final optionalPositional = <ParameterElement>[];
+            final optionalNamed = <ParameterElement>[];
+            final requiredNamed = <ParameterElement>[];
+
+            for (final parameter in virtual.parameters) {
+              if (parameter.isRequiredPositional) {
+                requiredPositional.add(parameter);
+              } else if (parameter.isOptionalPositional) {
+                optionalPositional.add(parameter);
+              } else if (parameter.isOptionalNamed) {
+                optionalNamed.add(parameter);
+              } else if (parameter.isRequiredNamed) {
+                requiredNamed.add(parameter);
+              }
+            }
+
+            {
+              for (final parameter in requiredPositional) {
+                if (parameter.isFinal) write("final ");
+                write("${parameter.type} ${parameter.name}, ");
+              }
+              if (optionalPositional.isNotEmpty) {
+                write("[");
+                for (final parameter in optionalPositional) {
+                  if (parameter.isFinal) write("final ");
+                  write(parameter.type);
+                  if (parameter.type.nullabilitySuffix == NullabilitySuffix.none) write("?");
+                  write(" ${parameter.name}, ");
+                }
+                write("]");
+              }
+              if (requiredNamed.isNotEmpty || optionalNamed.isNotEmpty) {
+                write("{");
+                for (final parameter in requiredNamed) {
+                  if (parameter.isFinal) write("final ");
+                  write("required ${parameter.type} ${parameter.name}, ");
+                }
+                for (final parameter in optionalNamed) {
+                  if (parameter.isFinal) write("final ");
+                  write(parameter.type);
+                  if (parameter.type.nullabilitySuffix == NullabilitySuffix.none) write("?");
+                  write(" ${parameter.name}, ");
+                }
+                write("}");
+              }
+            }
+            write(") => switch (this) {");
+            {
+              for (final subtype in subtypes) {
+                writeln("$name.${variantNames[subtype]} => ${subtype.name}.${virtual.name}(");
+                {
+                  for (final (index, parameter) in virtual.parameters.indexed) {
+                    if (parameter.isNamed) {
+                      write("${parameter.name}: ");
+                    }
+                    write(parameter.name);
+                    if (parameter.hasDefaultValue) {
+                      write(
+                        " ?? (${subtype.getMethod(virtual.name)!.parameters[index].defaultValueCode})",
+                      );
+                    }
+                    write(", ");
+                  }
+                }
+                writeln("),");
+              }
+            }
+            writeln("};");
           }
           writeln();
         }
