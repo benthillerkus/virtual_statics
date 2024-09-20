@@ -5,6 +5,3 @@
  - **FEAT**: generate member fields. ([db1264bb](https://github.com/benthillerkus/virtual_statics/commit/db1264bbd0acd53f6a9aee117d5f6287c0a37eea))
  - **FEAT**: generate documentation. ([b4b79250](https://github.com/benthillerkus/virtual_statics/commit/b4b7925009e607a430663197606f18ff993153b5))
 
-## 1.0.0
-
-- Initial version.
