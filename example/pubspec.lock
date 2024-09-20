@@ -492,14 +492,14 @@ packages:
       path: "../annotations"
       relative: true
     source: path
-    version: "1.0.0"
+    version: "0.1.0"
   virtual_statics_builder:
     dependency: "direct dev"
     description:
       path: "../generator"
       relative: true
     source: path
-    version: "1.0.0"
+    version: "0.1.0"
   vm_service:
     dependency: transitive
     description:

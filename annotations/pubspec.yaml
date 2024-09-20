@@ -1,6 +1,6 @@
 name: virtual_statics
 description: Annotations for package:virtual_statics
-version: 1.0.0
+version: 0.1.0
 repository: https://github.com/benthillerkus/virtual_statics
 
 environment:
