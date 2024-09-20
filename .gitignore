@@ -1,3 +1,10 @@
 # https://dart.dev/guides/libraries/private-files
 # Created by `dart pub`
 .dart_tool/
+
+annotations/LICENSE
+annotations/README.md
+annotations/.pubignore
+generator/LICENSE
+generator/README.md
+generator/.pubignore

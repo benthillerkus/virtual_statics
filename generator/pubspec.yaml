@@ -1,6 +1,6 @@
 name: virtual_statics_builder
 description: Overwrite static fields on sealed classes in Dart (using a generated companion enum).
-version: 0.1.0
+version: 0.0.1
 repository: https://github.com/benthillerkus/virtual_statics
 
 environment:
