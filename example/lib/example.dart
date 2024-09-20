@@ -4,21 +4,30 @@ import 'package:virtual_statics/virtual_statics.dart';
 
 part 'example.g.dart';
 
-@VirtualStatics(flattenHierarchy: true)
+@VirtualStatics()
 sealed class Thing {
   /// The database ID for this thing.
   @virtual
   static const dbId = 0;
+
+  @Virtual(OverridingPolicy.mayBeOverridden)
+  static const mayBeOverriden = 0;
+
+  @Virtual(OverridingPolicy.mustNotBeOverridden)
+  static const mustNotBeOverriden = 0;
 }
 
 class Animal extends Thing {
   static const dbId = 1;
+
+  static const mayBeOverriden = 1;
 }
 
 class Plant extends Thing {
   static const dbId = 2;
 
-  static int dbIdPlus(int other, {int another = -9, required int justAnother}) => dbId + other + another;}
+  static int dbIdPlus(int other, {int another = -9, required int justAnother}) => dbId + other + another;
+}
 
 class ExistentialDread implements Thing {
   static const dbId = 3;
@@ -40,7 +49,6 @@ class CRT extends Television {
   static double price = 100.0;
 
   static void a([int b = 0]) {}
-
 }
 
 class LCD extends Television {
@@ -57,18 +65,25 @@ void asdf() {
 @VirtualStatics(postfix: "es")
 sealed class Postfix {
   /// The length of the postfix.
-  @virtual
+  @Virtual(OverridingPolicy.mayBeOverridden)
   static int get length => 0;
+
+  @Virtual(OverridingPolicy.mayBeOverridden)
+  static (bool, bool?) myFunction(String positional, {Object? namedOptional, dynamic namedOptionalDynamic}) =>
+      (true, false);
 }
+
+class NoPostfix extends Postfix {}
 
 class S extends Postfix {
   static int get length => 1;
 
+  static (bool, bool?) myFunction(String positional, {Object? namedOptional, dynamic namedOptionalDynamic}) =>
+      (false, null);
 }
 
 class Kind extends Postfix {
   static int get length => 4;
-
 }
 
 // You heard it here first: a type is a thing.

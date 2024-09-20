@@ -3,7 +3,7 @@ import 'dart:async';
 import 'package:analyzer/dart/constant/value.dart';
 import 'package:analyzer/dart/element/element.dart';
 import 'package:analyzer/dart/element/nullability_suffix.dart';
-import 'package:analyzer/dart/element/visitor.dart';
+import 'package:analyzer/dart/element/type.dart';
 import 'package:build/build.dart';
 import 'package:source_gen/source_gen.dart';
 import 'package:virtual_statics/virtual_statics.dart';
@@ -31,7 +31,6 @@ class VirtualStaticsGenerator extends Generator {
                 "" => throw InvalidGenerationSourceError("[postfix] cannot be an empty String.", element: element),
                 final postfix => postfix,
               },
-              flattenHierarchy: annotation.read("flattenHierarchy").boolValue,
             )
           )
         else
@@ -62,9 +61,9 @@ class VirtualStaticsGenerator extends Generator {
     for (final MapEntry(key: root, value: (options, subtypes)) in hierarchy.entries) {
       final virtualFields = [
         for (final field in root.fields)
-          if (_virtualChecker.firstAnnotationOf(field) case final DartObject _)
+          if (_virtualChecker.firstAnnotationOf(field) case final DartObject annotation)
             if (field.isStatic)
-              field
+              (field, annotation)
             else
               throw InvalidGenerationSourceError(
                 "Only static fields can be annotated with @virtual.",
@@ -75,9 +74,9 @@ class VirtualStaticsGenerator extends Generator {
 
       final virtualGetters = [
         for (final field in root.accessors)
-          if (_virtualChecker.firstAnnotationOf(field) case final DartObject _)
+          if (_virtualChecker.firstAnnotationOf(field) case final DartObject annotation)
             if (field.isStatic && field.isGetter)
-              field
+              (field, annotation)
             else
               throw InvalidGenerationSourceError(
                 "Only static getters can be annotated with @virtual.",
@@ -88,9 +87,9 @@ class VirtualStaticsGenerator extends Generator {
 
       final virtualMethods = [
         for (final method in root.methods)
-          if (_virtualChecker.firstAnnotationOf(method) case final DartObject _)
+          if (_virtualChecker.firstAnnotationOf(method) case final DartObject annotation)
             if (method.isStatic)
-              method
+              (method, annotation)
             else
               throw InvalidGenerationSourceError(
                 "Only static methods can be annotated with @virtual.",
@@ -109,8 +108,15 @@ class VirtualStaticsGenerator extends Generator {
 
       // Check that all virtual fields and methods are implemented on each subtype.
       for (final subtype in subtypes) {
-        for (final virtual in virtualFields) {
+        for (final (virtual, annotation) in virtualFields) {
+          final policy = OverridingPolicy.values[annotation.getField("overrides")!.getField("index")!.toIntValue()!];
           if (subtype.getField(virtual.name) case final FieldElement field) {
+            if (policy == OverridingPolicy.mustNotBeOverridden) {
+              throw InvalidGenerationSourceError(
+                "Field must not be overridden.",
+                element: field,
+              );
+            }
             if (!field.isStatic) {
               throw InvalidGenerationSourceError(
                 "Field must be static.",
@@ -132,6 +138,7 @@ class VirtualStaticsGenerator extends Generator {
                 todo: "Change the type to ${virtual.type}.",
               );
             }
+          } else if (policy == OverridingPolicy.mayBeOverridden || policy == OverridingPolicy.mustNotBeOverridden) {
           } else {
             throw InvalidGenerationSourceError(
               "Subtype must have a static const field named '${virtual.name}'.",
@@ -141,8 +148,15 @@ class VirtualStaticsGenerator extends Generator {
           }
         }
 
-        for (final virtual in virtualGetters) {
+        for (final (virtual, annotation) in virtualGetters) {
+          final policy = OverridingPolicy.values[annotation.getField("overrides")!.getField("index")!.toIntValue()!];
           if (subtype.getGetter(virtual.name) case final PropertyAccessorElement getter) {
+            if (policy == OverridingPolicy.mustNotBeOverridden) {
+              throw InvalidGenerationSourceError(
+                "Getter must not be overridden.",
+                element: getter,
+              );
+            }
             if (!getter.isStatic) {
               throw InvalidGenerationSourceError(
                 "Getter must be static.",
@@ -156,6 +170,7 @@ class VirtualStaticsGenerator extends Generator {
                 todo: "Change the return type to ${virtual.returnType}.",
               );
             }
+          } else if (policy == OverridingPolicy.mayBeOverridden || policy == OverridingPolicy.mustNotBeOverridden) {
           } else {
             throw InvalidGenerationSourceError(
               "Subtype must have a static getter named '${virtual.name}'.",
@@ -165,8 +180,15 @@ class VirtualStaticsGenerator extends Generator {
           }
         }
 
-        for (final virtual in virtualMethods) {
+        for (final (virtual, annotation) in virtualMethods) {
+          final policy = OverridingPolicy.values[annotation.getField("overrides")!.getField("index")!.toIntValue()!];
           if (subtype.getMethod(virtual.name) case final MethodElement method) {
+            if (policy == OverridingPolicy.mustNotBeOverridden) {
+              throw InvalidGenerationSourceError(
+                "Method must not be overridden.",
+                element: method,
+              );
+            }
             if (!method.isStatic) {
               throw InvalidGenerationSourceError(
                 "Method must be static.",
@@ -234,6 +256,7 @@ class VirtualStaticsGenerator extends Generator {
                 );
               }
             }
+          } else if (policy == OverridingPolicy.mayBeOverridden || policy == OverridingPolicy.mustNotBeOverridden) {
           } else {
             throw InvalidGenerationSourceError(
               "Subtype must have a static method named '${virtual.name}'.",
@@ -256,9 +279,9 @@ class VirtualStaticsGenerator extends Generator {
                   : "${subtype.name.toLowerCase().substring(0, 1)}${subtype.name.substring(1)}",
       };
       final hasMembers = virtualFields.isNotEmpty || virtualGetters.isNotEmpty || virtualMethods.isNotEmpty;
-      final needsConstructor = hasMembers && virtualFields.any((field) => field.isConst);
+      final needsConstructor = hasMembers && virtualFields.any((t) => t.$1.isConst);
 
-      writeln("/// Helper class for [ ${root.name} ].");
+      writeln("/// Helper class for [${root.name}].");
       writeln("enum $name {");
       {
         // Declare variants
@@ -271,8 +294,11 @@ class VirtualStaticsGenerator extends Generator {
           if (needsConstructor) {
             write("(");
             {
-              for (final virtual in virtualFields.where((virtual) => virtual.isConst)) {
-                write("${virtual.name}: ${subtype.name}.${virtual.name}, ");
+              for (final (virtual, _) in virtualFields.where((t) => t.$1.isConst)) {
+                // If the field is not implemented on the subtype, use the root class ("inheritance").
+                write(
+                  "${virtual.name}: ${subtype.getField(virtual.name) != null ? subtype.name : root.name}.${virtual.name}, ",
+                );
               }
             }
             write(")");
@@ -284,7 +310,7 @@ class VirtualStaticsGenerator extends Generator {
         if (needsConstructor) {
           write("const $name({");
           {
-            for (final virtual in virtualFields.where((virtual) => virtual.isConst)) {
+            for (final (virtual, _) in virtualFields.where((t) => t.$1.isConst)) {
               write("required this.${virtual.name},");
             }
           }
@@ -294,7 +320,7 @@ class VirtualStaticsGenerator extends Generator {
 
         // Generate members
         if (hasMembers) {
-          for (final virtual in virtualFields) {
+          for (final (virtual, _) in virtualFields) {
             if (virtual.documentationComment != null) writeln(virtual.documentationComment);
             if (virtual.isConst) {
               writeln("final ${virtual.declaration};");
@@ -302,27 +328,31 @@ class VirtualStaticsGenerator extends Generator {
               write("${virtual.type} get ${virtual.name} => switch (this) {");
               {
                 for (final subtype in subtypes) {
-                  writeln("$name.${variantNames[subtype]} => ${subtype.name}.${virtual.name},");
+                  writeln(
+                    "$name.${variantNames[subtype]} => ${subtype.getField(virtual.name) != null ? subtype.name : root.name}.${virtual.name},",
+                  );
                 }
               }
               writeln("};");
             }
-              writeln();
+            writeln();
           }
 
-          for (final virtual in virtualGetters) {
+          for (final (virtual, _) in virtualGetters) {
             if (virtual.documentationComment != null) writeln(virtual.documentationComment);
             write("${virtual.returnType} get ${virtual.name} => switch (this) {");
             {
               for (final subtype in subtypes) {
-                writeln("$name.${variantNames[subtype]} => ${subtype.name}.${virtual.name},");
+                writeln(
+                  "$name.${variantNames[subtype]} => ${subtype.getGetter(virtual.name) != null ? subtype.name : root.name}.${virtual.name},",
+                );
               }
             }
             writeln("};");
             writeln();
           }
 
-          for (final virtual in virtualMethods) {
+          for (final (virtual, _) in virtualMethods) {
             if (virtual.documentationComment != null) writeln(virtual.documentationComment);
             write("${virtual.returnType} ${virtual.name}(");
             final requiredPositional = <ParameterElement>[];
@@ -352,7 +382,10 @@ class VirtualStaticsGenerator extends Generator {
                 for (final parameter in optionalPositional) {
                   if (parameter.isFinal) write("final ");
                   write(parameter.type);
-                  if (parameter.type.nullabilitySuffix == NullabilitySuffix.none) write("?");
+                  // Optional parameters need to be nullable. If the type is already nullable, don't add another `?`. Dynamic types are always nullable.
+                  if (parameter.type.nullabilitySuffix == NullabilitySuffix.none && parameter.type is! DynamicType) {
+                    write("?");
+                  }
                   write(" ${parameter.name}, ");
                 }
                 write("]");
@@ -366,7 +399,9 @@ class VirtualStaticsGenerator extends Generator {
                 for (final parameter in optionalNamed) {
                   if (parameter.isFinal) write("final ");
                   write(parameter.type);
-                  if (parameter.type.nullabilitySuffix == NullabilitySuffix.none) write("?");
+                  if (parameter.type.nullabilitySuffix == NullabilitySuffix.none && parameter.type is! DynamicType) {
+                    write("?");
+                  }
                   write(" ${parameter.name}, ");
                 }
                 write("}");
@@ -375,7 +410,9 @@ class VirtualStaticsGenerator extends Generator {
             write(") => switch (this) {");
             {
               for (final subtype in subtypes) {
-                writeln("$name.${variantNames[subtype]} => ${subtype.name}.${virtual.name}(");
+                writeln(
+                  "$name.${variantNames[subtype]} => ${subtype.getMethod(virtual.name) != null ? subtype.name : root.name}.${virtual.name}(",
+                );
                 {
                   for (final (index, parameter) in virtual.parameters.indexed) {
                     if (parameter.isNamed) {
@@ -384,7 +421,7 @@ class VirtualStaticsGenerator extends Generator {
                     write(parameter.name);
                     if (parameter.hasDefaultValue) {
                       write(
-                        " ?? (${subtype.getMethod(virtual.name)!.parameters[index].defaultValueCode})",
+                        " ?? (${(subtype.getMethod(virtual.name) ?? root.getMethod(virtual.name))!.parameters[index].defaultValueCode})",
                       );
                     }
                     write(", ");
@@ -412,8 +449,8 @@ class VirtualStaticsGenerator extends Generator {
       writeln("}");
       writeln();
 
-      // Generate accessor extension on root class (all subtypes can just 'inherit' it)
-      writeln("/// Extension for accessing virtual statics on [ $name ].");
+      // Generate accessor extension on root class (all subtypes just inherit it)
+      writeln("/// Extension for accessing virtual statics on [$name].");
       writeln("extension ${name}Ext on ${root.name} {");
       {
         writeln(
