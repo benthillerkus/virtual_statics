@@ -2,6 +2,8 @@
 # Created by `dart pub`
 .dart_tool/
 
+*.iml
+
 annotations/LICENSE
 annotations/README.md
 annotations/.pubignore
